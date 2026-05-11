@@ -1,0 +1,20 @@
+# Vault directories (data, not code)
+Boon-tiny-brain-*/
+CoOOH-OER/
+
+# Other repos / tools
+marker-api-master/
+obsidian-marker-master/
+scientific-agent-skills-main/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Vector index (large, vault-specific)
+.vectors.json
+
+# Secrets
+.bash_env
+.env
