@@ -63,6 +63,12 @@ Your Research Question
         │
         ▼
   [Nanny]   ── Writes the final deliverable + archives the full session
+        │         Auto-generates condensed abstract (same format)
+        │         Saves per-agent trace folder
+        │
+        ▼
+ [Crystallize] ── If audit PASS: auto-saves findings to wiki/concepts/
+                  If audit REVISE: skipped, run manually after review
 ```
 
 ---
@@ -78,7 +84,7 @@ Your Research Question
 | **Som** | Logic auditor — checks if the strategy is internally consistent | `handoff_audit.md` |
 | **Manao** | Fact auditor — cross-checks claims against wiki evidence | `handoff_audit.md` |
 | **Mod** | Extracts atomic insights, detects contradictions, marks stale knowledge | `handoff_mod.md` |
-| **Nanny** | Writes final report/slides/Obsidian page, archives the full session | `handoff_nanny.md` |
+| **Nanny** | Writes final report/slides/Obsidian page; archives full session as `research_`, condensed `abstract_`, and per-agent `trace_/` | `handoff_nanny.md` |
 
 ---
 
@@ -226,10 +232,12 @@ wiki-manager crystallize handoffs/research_20260511_2041.md
 
 **Output:**
 ```
-Crystallizing: mission_20260511_2041.md ...
+Crystallizing: research_20260511_2041.md ...
   → wiki/concepts/Role-of-Surface-Defects-in-CoOOH-for-OER.md
 ```
 → Creates a wiki page with: Summary, Key Findings, Mechanisms, Open Questions, Related Pages
+
+> **Note:** Crystallize runs automatically at the end of every pipeline session when the audit verdict is PASS. Run it manually only when the audit was REVISE and you want to commit findings after reviewing.
 
 ---
 
@@ -315,13 +323,19 @@ orchestrator "What is the role of surface defects in CoOOH for OER activity?"
 
 **Output formats at CP3:**
 
-| Format | Best for | Output |
-|--------|----------|--------|
-| `report` | Reading, sharing | Full technical report with abstract, findings, discussion |
-| `marp` | Presentations | Slide deck ready to open in VS Code + Marp extension |
-| `obsidian` | Knowledge base | Wikilink-rich page with callout blocks and Mermaid diagrams |
+| Format | Best for | Full output | Auto-generated abstract |
+|--------|----------|-------------|------------------------|
+| `report` | Reading, sharing | Full technical report with abstract, findings, discussion | ~500-word bullet brief |
+| `marp` | Presentations | Slide deck (VS Code + Marp extension) | ~7-slide condensed deck |
+| `obsidian` | Knowledge base | Wikilink-rich page with callout blocks and Mermaid diagrams | Compact callout page |
 
-All sessions are archived as `handoffs/research_YYYYMMDD_HHMM.md` — the complete record of every agent's work. Each session also auto-generates a condensed `handoffs/abstracts/abstract_YYYYMMDD_HHMM.md` and saves individual agent outputs to `handoffs/trace_YYYYMMDD_HHMM/`.
+Every session automatically produces 3 files:
+```
+handoffs/research_YYYYMMDD_HHMM.md        ← full archive (~13k words)
+handoffs/abstracts/abstract_YYYYMMDD_HHMM.md  ← condensed same-format version
+handoffs/trace_YYYYMMDD_HHMM/             ← individual agent handoffs preserved
+```
+And if audit verdict is **PASS**, findings are auto-crystallized into `wiki/concepts/`.
 
 ---
 
@@ -335,8 +349,10 @@ wiki-manager all
 
 # Day 2: Run a research session
 orchestrator "What gaps exist in understanding X?"
+# → produces research_, abstract_, trace_/ automatically
+# → auto-crystallizes into wiki/concepts/ if audit PASS
 
-# After the session: crystallize findings permanently
+# If audit was REVISE, review and crystallize manually
 wiki-manager crystallize
 
 # When writing a paper: export a section
@@ -389,6 +405,8 @@ my-vault/                    ← Your research project (data only)
 - **Structured Claims** — Each wiki page stores 30–50 LLM-extracted claims in YAML (`claims[]`), so agents read structured facts instead of raw text
 - **Contradiction Resolution** — Mod detects when new findings contradict old ones and marks superseded knowledge as stale
 - **Parallel Auditing** — Som and Manao fact-check simultaneously; silent retry before interrupting you
+- **Auto-crystallize** — Audit PASS automatically commits findings into `wiki/concepts/`; REVISE skips it so bad findings never pollute the knowledge base
+- **3-layer Session Output** — Every session produces a full archive, a condensed abstract, and a per-agent trace folder
 - **Multi-vault Support** — One code installation, unlimited research projects
 - **Audit Trail** — Every operation logged to `wiki/.audit-log.md`
 
