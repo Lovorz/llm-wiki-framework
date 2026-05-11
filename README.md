@@ -94,8 +94,8 @@ Your Research Question
 
 ```bash
 # 1. Clone the pipeline code
-git clone https://github.com/Lovorz/llm-wiki-framework.git
-cd llm-wiki-framework
+git clone https://github.com/Lovorz/agentic-research-wiki.git
+cd agentic-research-wiki
 pip install -r requirements.txt
 
 # 2. Store your Mistral API key permanently
@@ -352,7 +352,7 @@ wiki-manager synthesize "Main Topic"
 ## Project Structure
 
 ```
-llm-wiki-framework/          ← Pipeline code (install once, use everywhere)
+agentic-research-wiki/          ← Pipeline code (install once, use everywhere)
 ├── agents/
 │   ├── base.py              ← Shared: LLM calls, embeddings, multi-hop graph search
 │   ├── dao.py               ← Gap analysis & source discovery
