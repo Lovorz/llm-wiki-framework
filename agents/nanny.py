@@ -2,6 +2,41 @@
 from datetime import datetime
 from .base import BaseAgent, HANDOFF_DIR
 
+_BRIEF_SYSTEMS = {
+    "marp": (
+        "Format as a concise Marp slide deck (brief overview of the full session). "
+        "YAML front matter: marp: true, theme: default, size: 16:9, paginate: true.\n"
+        "One slide per agent section, separated by ---:\n"
+        "1. Title slide — research question + date\n"
+        "2. [Dao] Key Gaps — top 3–5 gaps as tight bullets\n"
+        "3. [Cherry] Blind Spots — top 2–3 blind spots as tight bullets\n"
+        "4. [Nam] Research Directions — all 5 directions, one line each\n"
+        "5. [Audit] Verdict — Som PASS/FAIL + Manao PASS/FAIL + top 2 flags\n"
+        "6. [Mod] Key Insights — top 3–5 insights as tight bullets\n"
+        "7. Next Steps — 3–5 concrete actions\n"
+        "Max 6 bullets per slide. No paragraphs. Scannable only."
+    ),
+    "report": (
+        "Write a concise research brief (~500 words). Sections:\n"
+        "1. Research Question (1 sentence)\n"
+        "2. Key Gaps (top 3–5, one sentence each)\n"
+        "3. Blind Spots (top 2–3, one sentence each)\n"
+        "4. Research Directions (all 5, one line each)\n"
+        "5. Audit Verdict (PASS/FAIL + top flag)\n"
+        "6. Key Insights (top 3–5, one sentence each)\n"
+        "7. Recommended Next Steps (3 bullets)\n"
+        "No paragraphs. Tight bullets throughout."
+    ),
+    "obsidian": (
+        "Format as a compact Obsidian brief page. Requirements:\n"
+        "- YAML frontmatter: type: brief, date, tags, summary (1 sentence)\n"
+        "- One > [!summary] callout per agent section (3–4 bullets each)\n"
+        "- All key concepts as [[wikilinks]]\n"
+        "- End with ## Next Steps (3 bullets)\n"
+        "Keep each callout tight — no prose paragraphs."
+    ),
+}
+
 _FORMAT_SYSTEMS = {
     "marp": (
         "Format the atomic insights as a complete Marp slide deck. "
@@ -56,14 +91,44 @@ class NannyAgent(BaseAgent):
         report = self.call_llm(system, user)
         self.write_handoff("nanny", report)
 
-        # Archived mission file: header + all agent handoffs + formatted output
+        # ── Full archive ──
         ts = timestamp or datetime.now().strftime("%Y%m%d_%H%M")
-        mission_path = HANDOFF_DIR / f"mission_{ts}.md"
-        mission_path.write_text(
+        research_path = HANDOFF_DIR / f"research_{ts}.md"
+        research_path.write_text(
             self._build_mission(idea, ts, report, fmt),
             encoding="utf-8",
         )
-        print(f"    → {mission_path.name}  (archived)")
+        print(f"    → research_{ts}.md  (archived)")
+
+        # ── Trace folder: preserve each agent's handoff for this session ──
+        trace_dir = HANDOFF_DIR / f"trace_{ts}"
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        for agent in ("dao", "builder", "cherry", "nam", "audit", "mod", "nanny"):
+            content = self.read_handoff(agent)
+            if not content.startswith("[Handoff not found"):
+                (trace_dir / f"handoff_{agent}.md").write_text(content, encoding="utf-8")
+        print(f"    → trace_{ts}/  (agent handoffs)")
+
+        # ── Abstract: condensed version in the same format ──
+        abstract_system = _BRIEF_SYSTEMS.get(fmt, _BRIEF_SYSTEMS["report"])
+        all_handoffs = ""
+        for agent, label in [
+            ("dao",   "[Dao] Discovery & Gap Analysis"),
+            ("cherry","[Cherry] Blind-Spot Sweep"),
+            ("nam",   "[Nam] Strategic Roadmap"),
+            ("audit", "[Som ∥ Manao] Audit"),
+            ("mod",   "[Mod] Atomic Insights"),
+        ]:
+            content = self.read_handoff(agent)
+            if not content.startswith("[Handoff not found"):
+                all_handoffs += f"\n\n### {label}\n{content[:2500]}"
+        abstract_user = f"**Research Topic:** {idea}\n\n{all_handoffs}"
+        abstract_output = self.call_llm(abstract_system, abstract_user)
+
+        abstracts_dir = HANDOFF_DIR / "abstracts"
+        abstracts_dir.mkdir(parents=True, exist_ok=True)
+        (abstracts_dir / f"abstract_{ts}.md").write_text(abstract_output, encoding="utf-8")
+        print(f"    → abstracts/abstract_{ts}.md  (condensed {fmt})")
 
         return report
 

@@ -218,9 +218,30 @@ def run_pipeline(idea: str) -> None:
     state["stage"] = "complete"
     _save_state(state)
 
+    # ── Auto-crystallize into wiki only if audit passed ────────────────────
+    crystallized = False
+    if audit["verdict"] == "PASS":
+        print(f"\n── [Crystallize] ──")
+        try:
+            sys.path.insert(0, str(_PIPELINE_HOME / "scripts"))
+            from wiki_manager import WikiManager
+            research_path = HANDOFF_DIR / f"research_{timestamp}.md"
+            if research_path.exists():
+                WikiManager().crystallize(str(research_path))
+                crystallized = True
+        except Exception as e:
+            print(f"    Crystallize failed: {e}")
+    else:
+        print(f"\n── [Crystallize] skipped — audit verdict was REVISE ──")
+
     print(f"\n🏁  MISSION COMPLETE")
-    print(f"    Archived → handoffs/mission_{timestamp}.md")
-    print(f"    Wiki page  → wiki/concepts/\n")
+    print(f"    Full      → handoffs/research_{timestamp}.md")
+    print(f"    Abstract  → handoffs/abstracts/abstract_{timestamp}.md")
+    print(f"    Trace     → handoffs/trace_{timestamp}/")
+    if crystallized:
+        print(f"    Wiki      → wiki/concepts/  ✓ (auto-crystallized)")
+    else:
+        print(f"    Wiki      → run 'wiki-manager crystallize' manually after review")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

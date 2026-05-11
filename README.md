@@ -221,7 +221,7 @@ Semantic Search: 'oxygen vacancy defects CoOOH'...
 wiki-manager crystallize
 
 # Or specify a session file
-wiki-manager crystallize handoffs/mission_20260511_2041.md
+wiki-manager crystallize handoffs/research_20260511_2041.md
 ```
 
 **Output:**
@@ -321,7 +321,7 @@ orchestrator "What is the role of surface defects in CoOOH for OER activity?"
 | `marp` | Presentations | Slide deck ready to open in VS Code + Marp extension |
 | `obsidian` | Knowledge base | Wikilink-rich page with callout blocks and Mermaid diagrams |
 
-All sessions are archived as `handoffs/mission_YYYYMMDD_HHMM.md` — the complete record of every agent's work.
+All sessions are archived as `handoffs/research_YYYYMMDD_HHMM.md` — the complete record of every agent's work. Each session also auto-generates a condensed `handoffs/abstracts/abstract_YYYYMMDD_HHMM.md` and saves individual agent outputs to `handoffs/trace_YYYYMMDD_HHMM/`.
 
 ---
 
@@ -375,7 +375,10 @@ my-vault/                    ← Your research project (data only)
 │   └── concepts/            ← Synthesized insight pages
 ├── exports/                 ← Generated slides, LaTeX, CSVs
 └── handoffs/                ← Agent outputs + archived sessions
-    └── mission_YYYYMMDD_HHMM.md
+    ├── research_YYYYMMDD_HHMM.md     ← full archive
+    ├── abstracts/
+    │   └── abstract_YYYYMMDD_HHMM.md ← condensed version
+    └── trace_YYYYMMDD_HHMM/          ← per-agent handoffs
 ```
 
 ---
