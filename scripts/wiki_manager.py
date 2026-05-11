@@ -333,20 +333,239 @@ class WikiManager:
         for i, (title, score) in enumerate(results):
             print(f"{i+1}. [[{title}]] (Match: {score:.3f})")
 
+    # ─────────────────────────────────── crystallize
+
+    def crystallize(self, mission_file: str = None) -> None:
+        """Distill a mission file into a permanent wiki/concepts/ insight page."""
+        if mission_file:
+            path = Path(mission_file)
+        else:
+            handoff_dir = Path("handoffs")
+            missions = sorted(handoff_dir.glob("mission_*.md"), reverse=True)
+            if not missions:
+                print("No mission files found in handoffs/")
+                return
+            path = missions[0]
+
+        print(f"Crystallizing: {path.name} ...")
+        content = path.read_text(encoding="utf-8", errors="ignore")
+
+        system = (
+            "You are a research crystallizer. Read this research mission file and distill "
+            "the most important permanent insights for a knowledge base.\n\n"
+            "Output a structured Markdown wiki page with:\n"
+            "- YAML frontmatter: title, type: insight, date, tags (list), confidence (0-1)\n"
+            "- ## Summary (3-5 sentences capturing the core finding)\n"
+            "- ## Key Findings (bullet list, preserve all LaTeX)\n"
+            "- ## Mechanisms (how/why it works)\n"
+            "- ## Open Questions (speculative insights reframed as testable questions)\n"
+            "- ## Related Pages (list of [[wikilinks]] to relevant wiki pages)\n\n"
+            "Be precise and permanent — this page will be read by future research sessions."
+        )
+        user = f"{content[:15000]}"
+
+        result = self._call_llm(system, user)
+
+        title_match = re.search(r'title:\s*["\']?(.+?)["\']?\s*\n', result)
+        title = title_match.group(1).strip() if title_match else path.stem
+        slug = re.sub(r'[^\w\-]', '-', title)[:60].strip('-')
+
+        concepts_dir = WIKI_DIR / "concepts"
+        concepts_dir.mkdir(parents=True, exist_ok=True)
+        out_path = concepts_dir / f"{slug}.md"
+        out_path.write_text(result, encoding="utf-8")
+        self._log_operation("crystallize", f"{path.name} → concepts/{slug}.md")
+        print(f"  → wiki/concepts/{slug}.md")
+
+    # ─────────────────────────────────── export
+
+    def export(self, topic: str, fmt: str = "marp") -> None:
+        """Generate slides/LaTeX/CSV/report from wiki knowledge on a topic."""
+        print(f"Exporting '{topic}' as {fmt} ...")
+
+        # Gather relevant pages via keyword match + claims
+        pages_content = ""
+        count = 0
+        for f in WIKI_DIR.glob("*.md"):
+            if count >= 8: break
+            content = f.read_text(encoding="utf-8", errors="ignore")
+            if any(w.lower() in content.lower() for w in topic.split()):
+                fm_match = self.frontmatter_pattern.match(content)
+                fm = yaml.safe_load(fm_match.group(1)) if fm_match else {}
+                claims = fm.get("claims", [])
+                snippet = "\n".join(f"- {c['fact']}" for c in claims[:20]) if claims else content[500:2000]
+                pages_content += f"\n\n### [[{f.stem}]]\n{snippet}"
+                count += 1
+
+        if not pages_content:
+            print("No relevant wiki pages found for this topic.")
+            return
+
+        format_systems = {
+            "marp": (
+                "Format as a complete Marp slide deck. Include YAML front matter "
+                "(marp: true, theme: gaia, size: 16:9, paginate: true). "
+                "Slides separated by ---. One key finding per slide with 4-6 bullet points. "
+                "Preserve all LaTeX. End with a Summary and Open Questions slide."
+            ),
+            "latex": (
+                "Format as LaTeX section content. Use \\section, \\subsection, itemize, "
+                "and equation environments. Preserve all math in $ or $$ delimiters. "
+                "Academic tone. Include a tabular environment for quantitative comparisons."
+            ),
+            "csv": (
+                "Format as CSV with header row: Claim,Confidence,Category,Source\n"
+                "Extract all quantitative claims. One row per claim. "
+                "Escape commas with quotes. No extra text — CSV only."
+            ),
+            "report": (
+                "Format as an academic report section with full paragraphs. "
+                "Include: Overview, Current State of the Art, Quantitative Comparison, "
+                "Contradictions & Gaps, Strategic Outlook. Preserve all LaTeX."
+            ),
+        }
+
+        system = format_systems.get(fmt, format_systems["report"])
+        user = f"Topic: {topic}\n\nWiki Knowledge:\n{pages_content}"
+        result = self._call_llm(system, user)
+
+        exports_dir = Path("exports")
+        exports_dir.mkdir(exist_ok=True)
+        ext = {"marp": "md", "latex": "tex", "csv": "csv", "report": "md"}.get(fmt, "md")
+        slug = re.sub(r'[^\w\-]', '-', topic)[:40].strip('-')
+        out_path = exports_dir / f"{slug}.{ext}"
+        out_path.write_text(result, encoding="utf-8")
+        self._log_operation("export", f"'{topic}' as {fmt} → {out_path}")
+        print(f"  → {out_path}")
+
+    # ─────────────────────────────────── lint
+
+    def lint(self) -> None:
+        """Find broken wikilinks and orphan pages in wiki/."""
+        pages = [f for f in WIKI_DIR.glob("*.md") if f.name not in ("index.md",)]
+        all_stems = {p.stem for p in pages}
+
+        incoming: dict = defaultdict(set)
+        broken: list = []
+
+        for page in pages:
+            content = page.read_text(encoding="utf-8", errors="ignore")
+            links = re.findall(r'\[\[([^\]|]+)(?:\|[^\]]*)?\]\]', content)
+            for link in links:
+                if link in all_stems:
+                    incoming[link].add(page.stem)
+                else:
+                    broken.append((page.stem, link))
+
+        orphans = [p.stem for p in pages if p.stem not in incoming]
+
+        print(f"\n=== Wiki Lint Report ===")
+        print(f"Total pages : {len(pages)}")
+        print(f"Broken links: {len(broken)}")
+        for page, link in broken[:30]:
+            print(f"  [[{link}]]  ←  in {page}")
+        if len(broken) > 30:
+            print(f"  ... and {len(broken) - 30} more")
+
+        print(f"\nOrphan pages (no incoming links): {len(orphans)}")
+        for o in orphans[:30]:
+            print(f"  {o}")
+        if len(orphans) > 30:
+            print(f"  ... and {len(orphans) - 30} more")
+
+        self._log_operation("lint", f"{len(broken)} broken links, {len(orphans)} orphans")
+
+    # ─────────────────────────────────── synthesize
+
+    def synthesize(self, concept: str, keywords: list = None) -> None:
+        """Create an expert State-of-the-Art synthesis page for a concept."""
+        print(f"Synthesizing: {concept} ...")
+        keywords = keywords or [concept]
+        concepts_dir = WIKI_DIR / "concepts"
+        concepts_dir.mkdir(parents=True, exist_ok=True)
+
+        raw_findings = []
+        sources = []
+        for f in WIKI_DIR.glob("*.md"):
+            if "Hub" in f.name or "concepts" in f.parts: continue
+            content = f.read_text(encoding="utf-8", errors="ignore")
+            if f"[[{concept}]]" in content or any(kw.lower() in content.lower() for kw in keywords):
+                sources.append(f.stem)
+                fm_match = self.frontmatter_pattern.match(content)
+                fm = yaml.safe_load(fm_match.group(1)) if fm_match else {}
+                claims = fm.get("claims", [])
+                if claims:
+                    block = "\n".join(f"- [{c.get('category','?')}] {c['fact']}" for c in claims[:25])
+                else:
+                    block = content[500:2500]
+                raw_findings.append(f"SOURCE [[{f.stem}]]:\n{block}")
+
+        if not raw_findings:
+            print(f"No wiki pages found for '{concept}'.")
+            return
+
+        compiled = "\n\n".join(raw_findings)[:15000]
+
+        system = (
+            "You are a senior materials scientist writing a State-of-the-Art synthesis. "
+            "Do NOT just list papers — synthesize trends, identify contradictions, "
+            "compare quantitative results. Use LaTeX for all formulas and units. "
+            "Academic, precise tone.\n\n"
+            "Structure:\n"
+            "## Overview\n## Current Trends\n## Quantitative Comparison\n"
+            "## Contradictions & Open Questions\n## Strategic Outlook"
+        )
+        user = f"Concept: {concept}\n\nFindings from {len(sources)} papers:\n\n{compiled}"
+        synthesis = self._call_llm(system, user)
+
+        fm = {
+            "title": f"{concept} — State of the Art",
+            "type": "synthesis",
+            "sources": sources[:30],
+            "last_updated": datetime.now().strftime("%Y-%m-%d"),
+        }
+        content = (
+            f"---\n{yaml.dump(fm, sort_keys=False, allow_unicode=True)}---\n"
+            f"# {concept}: State of the Art Synthesis\n\n"
+            f"{synthesis}\n\n---\n## Integrated Sources\n"
+            + "".join(f"- [[{s}]]\n" for s in sources[:30])
+        )
+        out_path = concepts_dir / f"{concept}.md"
+        out_path.write_text(content, encoding="utf-8")
+        self._log_operation("synthesize", f"'{concept}' → concepts/{concept}.md ({len(sources)} sources)")
+        print(f"  → wiki/concepts/{concept}.md  ({len(sources)} sources)")
+
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["ingest", "promote", "categorize", "index-vectors", "query", "all"])
-    parser.add_argument("query", nargs="?", help="Search query")
+    parser = argparse.ArgumentParser(prog="wiki-manager")
+    parser.add_argument("command", choices=[
+        "ingest", "promote", "categorize", "index-vectors",
+        "query", "all", "crystallize", "export", "lint", "synthesize"
+    ])
+    parser.add_argument("query", nargs="?", help="Topic / search query / mission file path")
+    parser.add_argument("--format", "-f", default="marp",
+                        choices=["marp", "latex", "csv", "report"],
+                        help="Output format for export (default: marp)")
+    parser.add_argument("--keywords", "-k", nargs="*",
+                        help="Extra keywords for synthesize")
     args = parser.parse_args()
     mgr = WikiManager()
-    if args.command == "ingest": mgr.ingest()
-    elif args.command == "promote": mgr.promote()
-    elif args.command == "categorize": mgr.categorize()
+
+    if args.command == "ingest":          mgr.ingest()
+    elif args.command == "promote":       mgr.promote()
+    elif args.command == "categorize":    mgr.categorize()
     elif args.command == "index-vectors": mgr.index_vectors()
+    elif args.command == "all":           mgr.ingest(); mgr.promote(); mgr.categorize(); mgr.index_vectors()
     elif args.command == "query":
-        if not args.query: print("Error: query requires a string.")
+        if not args.query: print("Error: query requires a search string.")
         else: mgr.query(args.query)
-    elif args.command == "all":
-        mgr.ingest(); mgr.promote(); mgr.categorize(); mgr.index_vectors()
+    elif args.command == "crystallize":   mgr.crystallize(args.query)
+    elif args.command == "export":
+        if not args.query: print("Error: export requires a topic.")
+        else: mgr.export(args.query, args.format)
+    elif args.command == "lint":          mgr.lint()
+    elif args.command == "synthesize":
+        if not args.query: print("Error: synthesize requires a concept name.")
+        else: mgr.synthesize(args.query, args.keywords)
 
 if __name__ == '__main__': main()
